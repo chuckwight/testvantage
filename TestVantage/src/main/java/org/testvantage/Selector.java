@@ -15,17 +15,20 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import com.auth0.jwt.JWT;
-import com.auth0.jwt.interfaces.DecodedJWT;
+import com.auth0.jwt.JWTCreator.Builder;
+import com.auth0.jwt.algorithms.Algorithm;
 
 @WebServlet("/test")
 public class Selector extends HttpServlet {
 	private static final long serialVersionUID = 137L;
 	private static String deployment_id = "1";
 	private static String client_id = "testvantage34495";
+	private static String rsa_key_id = null;
+	private static String quiz1ResourceLinkId = "01ce684d-63db-4a99-bf64-50e47af1de04";
 	private String tool_url = null;
 	private String tool_state = null;
-	private DecodedJWT id_token = null;
-
+	private static Builder id_token_builder = null;
+	
 	protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
 
 		response.setContentType("text/html");
@@ -62,12 +65,20 @@ public class Selector extends HttpServlet {
 
 	protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
 
-		doGet(request, response);
+		response.setContentType("text/html");
+		PrintWriter out = response.getWriter();	 
+		
+		switch (request.getParameter("UserRequest")) {
+		case "Launch Quiz1":
+			out.println(launchLtiResourceLink(quiz1ResourceLinkId));
+			break;
+		}
 	}
 
 	protected String getOIDCToken() throws Exception {
 		StringBuffer buf = new StringBuffer();
 		Random rand = new Random();
+		Date now = new Date();
 		
 		String query = "?iss=https://test-vantage.appspot.com&login_hint=user" + rand.nextInt(1000) + "&target_link_uri=" + tool_url + "/lti/launch"
 				+ "&lti_deployment_id=" + deployment_id + "&client_id=" + client_id;
@@ -84,15 +95,22 @@ public class Selector extends HttpServlet {
 			String q = new URL(redirectUrl).getQuery();
 			tool_state = new String(Base64.getUrlDecoder().decode(JWT.decode(getParameter("state",q)).getPayload()));
 			Date exp = JWT.decode(getParameter("state",q)).getExpiresAt();
-			//JsonObject state = JsonParser.parseString(new String(Base64.getUrlDecoder().decode(JWT.decode(getParameter("state",q)).getPayload()))).getAsJsonObject();
-			//Date exp = new Date(state.get("exp").getAsLong());
+			
+			if (rsa_key_id==null) rsa_key_id = KeyStore.getAKeyId("test-vantage");
+			//Algorithm algorithm = Algorithm.RSA256(null,KeyStore.getRSAPrivateKey(rsa_key_id));
+			
+			id_token_builder = JWT.create()
+					.withIssuer("https://test-vantage.appspot.com")
+					.withAudience(client_id)
+					.withSubject(getParameter("login_hint",q))
+					.withExpiresAt(new Date(now.getTime() + 5400000L))  // 90 minutes from now
+					.withClaim("https://purl.imsglobal.org/spec/lti/claim/deployment_id",deployment_id);
 			
 			buf.append("Success. The server gave a valid response to an OICD auth token request.<br/>"
 					+ "User: " + getParameter("login_hint",q) + "<br/>"
 					+ "Expires: " + exp.toString() + "<br/>"
 					+ "Nonce: " + getParameter("nonce",q) + "<br/><br/>"
 					+ "<a href='/test?ToolURL=" + tool_url + "'>Refresh token</a> or <a href='/'>Start over</a>");
-					//+ "URL: " + redirectUrl);
 		}
 		return buf.toString();
 	}
@@ -102,5 +120,21 @@ public class Selector extends HttpServlet {
 		int j = q.indexOf("&",i);
 		if (j == -1) j = q.length();
 		return q.substring(i,j);
+	}
+	
+	protected String launchLtiResourceLink(String resourceLinkId) {
+		StringBuffer buf = new StringBuffer();
+		
+		if (id_token_builder == null) return "You must first get a valid OIDC token to launch.";
+		String id_token = id_token_builder.sign(Algorithm.RSA256(null,KeyStore.getRSAPrivateKey(rsa_key_id)));
+		
+		buf.append("<form id=autoSubmitForm method=post action=" + tool_url + "/lti/launch>"
+				+ "<input type=hidden name=id_token value='" + id_token + "' />"
+				+ "<input type=hidden name=state value='" + tool_state + "' />"
+				+ "</form>"
+				+ "<script>"
+				+ "window.onload=document.getElementById('autoSubmitForm').submit();"
+				+ "</script>");
+		return buf.toString();
 	}
 }
