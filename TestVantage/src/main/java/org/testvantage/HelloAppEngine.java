@@ -12,7 +12,8 @@ import javax.servlet.http.HttpServletResponse;
     urlPatterns = {"/hello"}
 )
 public class HelloAppEngine extends HttpServlet {
-
+	static final long serialVersionUID = 137L;
+	
   @Override
   public void doGet(HttpServletRequest request, HttpServletResponse response) 
       throws IOException {
