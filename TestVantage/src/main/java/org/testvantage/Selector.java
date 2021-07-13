@@ -15,25 +15,20 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import com.auth0.jwt.JWT;
-import com.auth0.jwt.JWTCreator.Builder;
 import com.auth0.jwt.algorithms.Algorithm;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
 
 @WebServlet("/test")
 public class Selector extends HttpServlet {
 	private static final long serialVersionUID = 137L;
 	private static String deployment_id = "1";
 	private static String client_id = "testvantage34495";
-	private static String rsa_key_id = null;
-	private static String quiz1ResourceLinkId = "01ce684d-63db-4a99-bf64-50e47af1de04";
+	private static String q = null;
 	private String tool_url = null;
 	private String tool_state = null;
-	private static Builder id_token_builder = null;
 	
 	protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
 
-		response.setContentType("text/html");
+		response.setContentType("text/html;charset=UTF-8");
 		PrintWriter out = response.getWriter();	 
 		StringBuffer buf = new StringBuffer();
 
@@ -69,18 +64,20 @@ public class Selector extends HttpServlet {
 
 		response.setContentType("text/html");
 		PrintWriter out = response.getWriter();	 
-		
+		try {
 		switch (request.getParameter("UserRequest")) {
 		case "Launch Quiz1":
-			out.println(launchLtiResourceLink(quiz1ResourceLinkId));
+			out.println(launchLtiResourceLink());
 			break;
+		}
+		} catch (Exception e) {
+			out.println("Error: " + e.toString() + " " + e.getMessage());
 		}
 	}
 
 	protected String getOIDCToken() throws Exception {
 		StringBuffer buf = new StringBuffer();
 		Random rand = new Random();
-		Date now = new Date();
 		
 		String query = "?iss=https://test-vantage.appspot.com&login_hint=user" + rand.nextInt(1000) + "&target_link_uri=" + tool_url + "/lti/launch"
 				+ "&lti_deployment_id=" + deployment_id + "&client_id=" + client_id;
@@ -94,21 +91,9 @@ public class Selector extends HttpServlet {
 		if (redirectUrl == null) 
 			buf.append("Server responded: " + uc.getResponseCode() + " " + uc.getResponseMessage());
 		else {
-			String q = new URL(redirectUrl).getQuery();
+			q = new URL(redirectUrl).getQuery();
 			tool_state = new String(Base64.getUrlDecoder().decode(JWT.decode(getParameter("state",q)).getPayload()));
 			Date exp = JWT.decode(getParameter("state",q)).getExpiresAt();
-			
-			if (rsa_key_id==null) rsa_key_id = KeyStore.getAKeyId("test-vantage");
-			//Algorithm algorithm = Algorithm.RSA256(null,KeyStore.getRSAPrivateKey(rsa_key_id));
-			
-			id_token_builder = JWT.create()
-					.withIssuer("https://test-vantage.appspot.com")
-					.withAudience(client_id)
-					.withSubject(getParameter("login_hint",q))
-					.withExpiresAt(new Date(now.getTime() + 5400000L))  // 90 minutes from now
-					.withClaim("https://purl.imsglobal.org/spec/lti/claim/deployment_id",deployment_id)
-					.withClaim("https://purl.imsglobal.org/spec/lti/claim/version", "1.3.0")
-					.withClaim("https://purl.imsglobal.org/spec/lti/claim/message_type", "LtiResourceLinkRequest");
 			
 			buf.append("Success. The server gave a valid response to an OICD auth token request.<br/>"
 					+ "User: " + getParameter("login_hint",q) + "<br/>"
@@ -126,10 +111,38 @@ public class Selector extends HttpServlet {
 		return q.substring(i,j);
 	}
 	
-	protected String launchLtiResourceLink(String resourceLinkId) {
+	protected String launchLtiResourceLink() throws Exception {
 		StringBuffer buf = new StringBuffer();
+		Date now = new Date();
+		//String quiz1ResourceLinkId = "01ce684d-63db-4a99-bf64-50e47af1de04";
+		//Encoder enc = Base64.getUrlEncoder().withoutPadding();
+		String rsa_key_id = KeyStore.getAKeyId("test-vantage");
 		
-		if (id_token_builder == null) return "You must first get a valid OIDC token to launch.";
+		String id_token = JWT.create()
+				.withIssuer("https://test-vantage.appspot.com")
+				.withSubject(getParameter("login_hint", q))
+				.withAudience(client_id)
+				.withKeyId(rsa_key_id)
+				.withExpiresAt(new Date(now.getTime() + 5400000L))
+				.sign(Algorithm.RSA256(KeyStore.getRSAPublicKey(rsa_key_id),KeyStore.getRSAPrivateKey(rsa_key_id)));
+		/*
+		// Create a JSON header for the JWT to send as id_token
+		JsonObject header = new JsonObject();
+		header.addProperty("typ", "JWT");
+		header.addProperty("alg", "RS256");
+		header.addProperty("kid", rsa_key_id);
+		byte[] hdr = enc.encode(header.toString().getBytes("UTF-8"));
+
+		// Create the id_token payload
+		JsonObject payload = new JsonObject();
+		payload = new JsonObject();
+		payload.addProperty("iss", "https://test-vantage.appspot.com");
+		payload.addProperty("aud",client_id);
+		payload.addProperty("sub",getParameter("login_hint",q));
+		payload.addProperty("exp",(new Date(now.getTime() + 5400000L).getTime()/1000));
+		payload.addProperty("https://purl.imsglobal.org/spec/lti/claim/deployment_id",deployment_id);
+		payload.addProperty("https://purl.imsglobal.org/spec/lti/claim/version", "1.3.0");
+		payload.addProperty("https://purl.imsglobal.org/spec/lti/claim/message_type", "LtiResourceLinkRequest");
 		
 		JsonObject resourceLink = new JsonObject();
 		resourceLink.addProperty("id", quiz1ResourceLinkId);
@@ -137,23 +150,34 @@ public class Selector extends HttpServlet {
 		JsonArray roleClaim = new JsonArray();
 		roleClaim.add("instructor");
 		
-		id_token_builder = id_token_builder
-				.withClaim("https://purl.imsglobal.org/spec/lti/claim/resource_link", resourceLink.toString())
-				.withClaim("https://purl.imsglobal.org/spec/lti/claim/roles", roleClaim.toString());
+		//payload.add("https://purl.imsglobal.org/spec/lti/claim/resource_link",resourceLink);
+		//payload.add("https://purl.imsglobal.org/spec/lti/claim/roles",roleClaim);
 		
-		String id_token = id_token_builder.sign(Algorithm.RSA256(null,KeyStore.getRSAPrivateKey(rsa_key_id)));
-		//id_token = new String(Base64.getUrlEncoder().withoutPadding().encode(id_token.getBytes()));
+		byte[] pld = enc.encode(payload.toString().getBytes("UTF-8"));
+		
+		// Join the header and payload together with a period separator:
+		String id_token = String.format("%s.%s",new String(hdr),new String(pld));
+
+		// Add a signature item to complete the JWT:
+		Signature signature = Signature.getInstance("SHA256withRSA");
+		
+		signature.initSign(KeyStore.getRSAPrivateKey(rsa_key_id),new SecureRandom());
+		signature.update(id_token.getBytes("UTF-8"));
+		String sig = new String(enc.encode(signature.sign()));
+		id_token = String.format("%s.%s", id_token, sig);
+*/
+		buf.append("<html><body>");
 		buf.append(id_token);
 		
-		buf.append("<form id=autoSubmitForm method=post action=" + tool_url + "/lti/launch>"
+		buf.append("<form id=autoSubmitForm method=post action='" + tool_url + "/lti/launch'>"
 				+ "<input type=hidden name=id_token value='" + id_token + "' />"
 				+ "<input type=hidden name=state value='" + tool_state + "' />"
 				+ "<input type=submit value='Launch the assignment now' />"
 				+ "</form>"
 				+ "<script>"
-				+ "window.onload=document.getElementById('autoSubmitForm').submit();"
+				//+ "window.onload=document.getElementById('autoSubmitForm').submit();"
 				+ "</script>");
-		
+		buf.append("</body></html>");
 		return buf.toString();
 	}
 }
