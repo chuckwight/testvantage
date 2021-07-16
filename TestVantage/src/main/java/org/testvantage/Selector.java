@@ -4,7 +4,10 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.security.SecureRandom;
+import java.security.Signature;
 import java.util.Base64;
+import java.util.Base64.Encoder;
 import java.util.Date;
 import java.util.Random;
 
@@ -15,7 +18,8 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import com.auth0.jwt.JWT;
-import com.auth0.jwt.algorithms.Algorithm;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 
 @WebServlet("/test")
 public class Selector extends HttpServlet {
@@ -92,7 +96,7 @@ public class Selector extends HttpServlet {
 			buf.append("Server responded: " + uc.getResponseCode() + " " + uc.getResponseMessage());
 		else {
 			q = new URL(redirectUrl).getQuery();
-			tool_state = new String(Base64.getUrlDecoder().decode(JWT.decode(getParameter("state",q)).getPayload()));
+			tool_state = getParameter("state",q);
 			Date exp = JWT.decode(getParameter("state",q)).getExpiresAt();
 			
 			buf.append("Success. The server gave a valid response to an OICD auth token request.<br/>"
@@ -114,18 +118,16 @@ public class Selector extends HttpServlet {
 	protected String launchLtiResourceLink() throws Exception {
 		StringBuffer buf = new StringBuffer();
 		Date now = new Date();
-		//String quiz1ResourceLinkId = "01ce684d-63db-4a99-bf64-50e47af1de04";
-		//Encoder enc = Base64.getUrlEncoder().withoutPadding();
+		String quiz1ResourceLinkId = "01ce684d-63db-4a99-bf64-50e47af1de04";
+		Encoder enc = Base64.getUrlEncoder().withoutPadding();
 		String rsa_key_id = KeyStore.getAKeyId("test-vantage");
 		
-		String id_token = JWT.create()
-				.withIssuer("https://test-vantage.appspot.com")
-				.withSubject(getParameter("login_hint", q))
-				.withAudience(client_id)
-				.withKeyId(rsa_key_id)
-				.withExpiresAt(new Date(now.getTime() + 5400000L))
-				.sign(Algorithm.RSA256(KeyStore.getRSAPublicKey(rsa_key_id),KeyStore.getRSAPrivateKey(rsa_key_id)));
-		/*
+		JsonObject resourceLink = new JsonObject();
+		resourceLink.addProperty("id", quiz1ResourceLinkId);
+		
+		JsonArray roleClaim = new JsonArray();
+		roleClaim.add("instructor");
+		
 		// Create a JSON header for the JWT to send as id_token
 		JsonObject header = new JsonObject();
 		header.addProperty("typ", "JWT");
@@ -144,14 +146,8 @@ public class Selector extends HttpServlet {
 		payload.addProperty("https://purl.imsglobal.org/spec/lti/claim/version", "1.3.0");
 		payload.addProperty("https://purl.imsglobal.org/spec/lti/claim/message_type", "LtiResourceLinkRequest");
 		
-		JsonObject resourceLink = new JsonObject();
-		resourceLink.addProperty("id", quiz1ResourceLinkId);
-		
-		JsonArray roleClaim = new JsonArray();
-		roleClaim.add("instructor");
-		
-		//payload.add("https://purl.imsglobal.org/spec/lti/claim/resource_link",resourceLink);
-		//payload.add("https://purl.imsglobal.org/spec/lti/claim/roles",roleClaim);
+		payload.add("https://purl.imsglobal.org/spec/lti/claim/resource_link",resourceLink);
+		payload.add("https://purl.imsglobal.org/spec/lti/claim/roles",roleClaim);
 		
 		byte[] pld = enc.encode(payload.toString().getBytes("UTF-8"));
 		
@@ -165,19 +161,15 @@ public class Selector extends HttpServlet {
 		signature.update(id_token.getBytes("UTF-8"));
 		String sig = new String(enc.encode(signature.sign()));
 		id_token = String.format("%s.%s", id_token, sig);
-*/
-		buf.append("<html><body>");
-		buf.append(id_token);
-		
+
 		buf.append("<form id=autoSubmitForm method=post action='" + tool_url + "/lti/launch'>"
 				+ "<input type=hidden name=id_token value='" + id_token + "' />"
 				+ "<input type=hidden name=state value='" + tool_state + "' />"
-				+ "<input type=submit value='Launch the assignment now' />"
+				//+ "<input type=submit value='Launch the assignment now' />"
 				+ "</form>"
 				+ "<script>"
-				//+ "window.onload=document.getElementById('autoSubmitForm').submit();"
+				+ "window.onload=document.getElementById('autoSubmitForm').submit();"
 				+ "</script>");
-		buf.append("</body></html>");
 		return buf.toString();
 	}
 }
