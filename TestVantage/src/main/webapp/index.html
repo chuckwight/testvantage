@@ -2,22 +2,21 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
   <head>
     <meta http-equiv="content-type" content="application/xhtml+xml; charset=UTF-8" />
-    <title>Hello App Engine</title>
+    <title>ChemVantage Regression Tester</title>
   </head>
 
   <body>
-    <h1>Hello App Engine!</h1>
-
-    <table>
-      <tr>
-        <td colspan="2" style="font-weight:bold;">Available Servlets:</td>        
-      </tr>
-      <tr>
-        <td><a href='/hello'>Hello servlet</a></td>
-      </tr>
-      <tr>
-        <td><a href='/test'>Regression tests</a></td>
-      </tr>
-    </table>
+    <h1>ChemVantage Regression Tests</h1>
+	<form method=get action=/test>
+	Choose a server...<br/>
+	<label><input type=radio name=ToolURL value=prod />www.chemvantage.org</label><br/>
+    <label><input type=radio name=ToolURL value=dev />dev-vantage-hrd.appspot.com</label><br/>
+    <br/><br/>
+    ...and a test:<br/>
+    <label><input type=radio name=Test value=AuthToken />Get AuthToken only</label><br/>
+    <label><input type=radio name=Test value=Quiz1 />Launch Quiz1</label><br/>
+    <label><input type=radio name=Test value=all />Run all tests</label><br/>
+    <input type=submit>
+    </form>
   </body>
 </html>
