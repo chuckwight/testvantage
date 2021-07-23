@@ -11,6 +11,7 @@ import java.security.SecureRandom;
 import java.security.Signature;
 import java.util.Base64;
 import java.util.Base64.Encoder;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.Properties;
 import java.util.Random;
@@ -127,7 +128,7 @@ public class Selector extends HttpServlet {
 			
 			// read the assignment page
 			BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));				
-			res.append("The regression test for " + tool_url + " failed for ResourceLinkId " + resourceLinkId + ":<br/><br/>");
+			//res.append("The regression test for " + tool_url + " failed for ResourceLinkId " + resourceLinkId + ":<br/><br/>");
     		String line;
     		while ((line = reader.readLine()) != null) {
     			res.append(line);
@@ -135,22 +136,30 @@ public class Selector extends HttpServlet {
     		reader.close();
     		wr.close();
 			
-			if (res.indexOf("<html>")>0 && res.indexOf("Quiz Rules")>0) return "Regression test passed OK.";
+			if (res.indexOf("<html>")>0 && res.indexOf("Quiz Rules")>0) {
+				Calendar rightNow = Calendar.getInstance();
+				if (rightNow.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) sendMessage("ChemVantage Regression Tests Passed","Regression tests on " + tool_url + " passed OK.");
+				return "Regression test passed OK.";
+			}
 			else {
 				// send an email to the ChemVantage administrator
-				Properties props = new Properties();
-				Session session = Session.getDefaultInstance(props, null);
-				Message msg = new MimeMessage(session);
-				msg.setFrom(new InternetAddress("chuck.wight@gmail.com", "TestVantage"));
-				msg.addRecipient(Message.RecipientType.TO,new InternetAddress("admin@chemvantage.org", "ChemVantage"));
-				msg.setSubject("ChemVantage Regression Test Failure");
-				msg.setContent(res,"text/html");
-				Transport.send(msg);
+				sendMessage("ChemVantage Regression Test Failure",res.toString());
+				return res.toString();
 			}
 		} catch (Exception e) {
 			return "Error: " + e.toString() + " " + e.getMessage();
 		}
-		return "Test passed OK.<br/>";
+	}
+	
+	protected void sendMessage(String subject,String body) throws Exception {
+		Properties props = new Properties();
+		Session session = Session.getDefaultInstance(props, null);
+		Message msg = new MimeMessage(session);
+		msg.setFrom(new InternetAddress("chuck.wight@gmail.com", "TestVantage"));
+		msg.addRecipient(Message.RecipientType.TO,new InternetAddress("admin@chemvantage.org", "ChemVantage"));
+		msg.setSubject(subject);
+		msg.setContent(body,"text/html");
+		Transport.send(msg);
 	}
 	
 	protected String getAuthToken(String server, String user) {
