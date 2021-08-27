@@ -36,9 +36,9 @@ public class KeyStore extends HttpServlet {
 		if (jwks == null) buildJwks();
 		String kid = request.getParameter("kid");
 		String fmt = request.getParameter("fmt");
-		if (fmt != null && kid != null) out.println(getRSAPublicKeyX509(getAKeyId(kid)));
+		if (fmt != null && kid != null) out.println(getRSAPublicKeyX509(kid));
 		else if (kid != null) {
-			JsonObject jwk = getJwk(getAKeyId(kid));
+			JsonObject jwk = getJwk(kid);
 			out.println(jwk==null?"Key not found.":jwk.toString());
 		}
 		else out.println(jwks);
@@ -59,7 +59,14 @@ public class KeyStore extends HttpServlet {
 			JsonObject jwk = new JsonObject();
 			jwk.addProperty("kty", pk.getAlgorithm());
 			jwk.addProperty("kid", rsa_key_id);
-			jwk.addProperty("n", Base64.getUrlEncoder().encodeToString(pk.getModulus().toByteArray()));
+
+			byte[] mod1 = pk.getModulus().toByteArray();
+			if (mod1.length == 257 && mod1[0] == 0) {  // modulus has an extra sign byte that needs to be stripped off
+				byte[] mod2 = new byte[256];
+				for (int i=0;i<256;i++) mod2[i] = mod1[i+1];
+				jwk.addProperty("n", Base64.getUrlEncoder().encodeToString(mod2));
+			} else jwk.addProperty("n", Base64.getUrlEncoder().encodeToString(mod1));
+			
 			jwk.addProperty("e", Base64.getUrlEncoder().encodeToString(pk.getPublicExponent().toByteArray()));
 			jwk.addProperty("alg", "RS256");
 			jwk.addProperty("use", "sig");
@@ -72,22 +79,9 @@ public class KeyStore extends HttpServlet {
 	protected static String buildJwks() {
 		if (rsaKeys.isEmpty()) createNewKeyMap();
 		
-		JsonObject json = new JsonObject();
 		JsonArray keys = new JsonArray();
-		for (RSAKeyPair k : rsaKeys.values()) {
-			try {		
-				JsonObject jwk = new JsonObject();
-				jwk.addProperty("kty", "RSA");
-				jwk.addProperty("kid", k.kid);
-				RSAPublicKey pub = k.getRSAPublicKey();
-				jwk.addProperty("n", Base64.getUrlEncoder().encodeToString(pub.getModulus().toByteArray()));
-				jwk.addProperty("e", Base64.getUrlEncoder().encodeToString(pub.getPublicExponent().toByteArray()));
-				jwk.addProperty("alg", "RS256");
-				jwk.addProperty("use", "sig");
-				keys.add(jwk);
-			} catch (Exception e) {
-			}			
-		}
+		for (String kid : rsaKeys.keySet()) keys.add(getJwk(kid));
+		JsonObject json = new JsonObject();
 		json.add("keys", keys);
 		jwks = json.toString();
 		return jwks;
