@@ -3,3 +3,7 @@ cron:
   schedule: every day 06:00
   timezone: America/New_York
   description: "daily regression test"
+- url: /test?ToolURL=prod&Test=all
+  schedule: every day 06:01
+  timezone: America/New_York
+  description: "daily regression test"
